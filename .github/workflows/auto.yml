@@ -1,0 +1,39 @@
+name: Auto Download
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          pip install yt-dlp google-api-python-client google-auth google-auth-oauthlib
+
+      - name: Restore token.json
+        run: |
+          echo "${{ secrets.DRIVE_TOKEN }}" | base64 -d > token.json
+
+      - name: Run Script
+        env:
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: python script.py
+
+      - name: Commit completed.txt
+        run: |
+          git config user.name "bot"
+          git config user.email "bot@github.com"
+          git add completed.txt
+          git commit -m "Update completed" || echo "No changes"
+          git push
