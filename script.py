@@ -8,17 +8,18 @@ from googleapiclient.http import MediaFileUpload
 
 LINKS_FILE = "links.txt"
 COMPLETED_FILE = "completed.txt"
-DOWNLOAD_FOLDER = "downloads"
+DOWNLOAD_DIR = "downloads"
+
 DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID")
 
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-def read_file(file):
+def read_lines(file):
     if not os.path.exists(file):
-        return []
+        return set()
     with open(file, "r") as f:
-        return [line.strip() for line in f if line.strip()]
+        return set(line.strip() for line in f if line.strip())
 
 
 def append_completed(link):
@@ -30,10 +31,17 @@ def download_video(link):
     print(f"Downloading: {link}")
     subprocess.run([
         "yt-dlp",
-        "-o",
-        f"{DOWNLOAD_FOLDER}/%(title)s.%(ext)s",
+        "-f", "mp4",
+        "-o", f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
         link
     ], check=True)
+
+
+def get_latest_file():
+    files = [os.path.join(DOWNLOAD_DIR, f) for f in os.listdir(DOWNLOAD_DIR)]
+    if not files:
+        return None
+    return max(files, key=os.path.getctime)
 
 
 def upload_to_drive(filepath):
@@ -53,12 +61,12 @@ def upload_to_drive(filepath):
         fields="id"
     ).execute()
 
-    print("Uploaded to Drive:", filepath)
+    print("Uploaded:", filepath)
 
 
 def main():
-    links = set(read_file(LINKS_FILE))
-    completed = set(read_file(COMPLETED_FILE))
+    links = read_lines(LINKS_FILE)
+    completed = read_lines(COMPLETED_FILE)
 
     new_links = links - completed
 
@@ -70,20 +78,18 @@ def main():
         try:
             download_video(link)
 
-            latest_file = max(
-                [os.path.join(DOWNLOAD_FOLDER, f) for f in os.listdir(DOWNLOAD_FOLDER)],
-                key=os.path.getctime
-            )
+            file_path = get_latest_file()
+            if file_path:
+                upload_to_drive(file_path)
+                append_completed(link)
 
-            upload_to_drive(latest_file)
-            append_completed(link)
-
-            delay = random.randint(5, 15)
-            print(f"Sleeping {delay} sec...")
-            time.sleep(delay)
+                delay = random.randint(6, 18)
+                print(f"Sleeping {delay} seconds...")
+                time.sleep(delay)
 
         except Exception as e:
-            print("Error:", e)
+            print("Error processing:", link)
+            print(e)
 
 
 if __name__ == "__main__":
